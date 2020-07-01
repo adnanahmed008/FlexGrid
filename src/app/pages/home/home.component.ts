@@ -8,6 +8,7 @@ import { Component, OnInit, ViewEncapsulation } from '@angular/core';
 })
 export class HomeComponent implements OnInit {
   private srvData: DataService;
+  private table: TABLE;
 
   constructor() { }
 
@@ -18,26 +19,45 @@ export class HomeComponent implements OnInit {
   }
 
   initTable() {
-    let columns = [
-      { key: "FIRSTNAME", title: "First Name", width: "15%" },
-      { key: "LASTNAME", title: "Last Name", width: "15%" },
-      { key: "ADDRESS", title: "Address", width: "20%" },
-      { key: "City", title: "City", width: "20%" },
-      { key: "STATE", title: "State", width: "20%" },
-      { key: "ZIP", title: "Zip", width: "10%" }
+    let columns: IColumn[] = [
+      { key: "SELECT", title: "", type: EColType.CHECKBOX, checked: true, canSort: false, styles: { width: "20px" }, formatterCheckbox: (row, chk) => {
+        chk.checked = row.cells[0].value.length > 5;
+        return chk;
+      } },
+      { key: "FIRSTNAME", title: "First Name", styles: { width: "15%" } },
+      { key: "LASTNAME", title: "Last Name", styles: { width: "15%" } },
+      { key: "ADDRESS", title: "Address", styles: { width: "20%" } },
+      { key: "City", title: "City", styles: { width: "20%" }, canSort: false },
+      { key: "STATE", title: "State", styles: { width: "20%" } },
+      { key: "ZIP", title: "Zip", styles: { width: "10%" } }
     ];
-    let table = new TABLE({
+    this.table = new TABLE({
       tableId: "grid",
       pagerId: "pager",
       columns: columns,
-      dataCallback: (pageNumber, pageSize, sortBy, sortDirection) => {
-        console.log("Page Number: ", pageNumber, "Page Size: ", pageSize, "Sort By: ", sortBy, "Sort Direction: ", sortDirection);
-        return this.srvData.getData(pageNumber, pageSize, sortBy, sortDirection, columns.findIndex(c => c.key == sortBy));
+      multiSelect: true,
+      sortBy: columns[1].key,
+      sortDirection: ESortDirection.DECENDING,
+      dataCallback: (pageNumber, pageSize, sortBy, sortDirection): Promise<{
+        rows: IRow[];
+        total: number;
+        hasError: boolean;
+      }> => {
+        return new Promise(resolve => {
+          let resp = this.srvData.getData(pageNumber, pageSize, sortBy, sortDirection, columns[0].type == EColType.CHECKBOX ? columns.findIndex(c => c.key == sortBy) - 1 : columns.findIndex(c => c.key == sortBy));
+          resolve(resp);
+        })
+      },
+      onRowSelect: (row, isSelected, chk) => {
+        console.log("On Row Select: ", isSelected ? true : false);
+        chk.checked = false;
       }
     });
   }
 
-
+  getSelectedRow() {
+    console.log(this.table.getSelectedRow());
+  }
 }
 
 class TABLE {
@@ -52,21 +72,59 @@ class TABLE {
   private lastPageNumber: number = 1;
   private sortBy: string = null;
   private sortDirection: string = null;
-  private dataCallback: (pageNumber: number, pageSize: number, sortBy: string, sortDirection: string) => { rows: IRow[]; totalCount: number; };
+  private rows: IRow[] = [];
+  private selectedRows: IRow[] = [];
+  private isMultiSelection: boolean = false;
+  private dataCallback: (
+    pageNumber: number,
+    pageSize: number,
+    sortBy: string,
+    sortDirection: string
+  ) => Promise<{
+    rows: IRow[];
+    total: number;
+    hasError: boolean;
+  }>;
+  private onTableReady: Function;
+  private onRowsUpdated: Function;
+  private onRowSelect?: (row: IRow, isSelected: boolean, chk: HTMLInputElement) => void;
+
+  private version: string = "1.0.0";
 
   constructor(options: {
     tableId: string;
     pagerId: string;
     columns: IColumn[];
     pageSize?: number;
-    dataCallback: (pageNumber: number, pageSize: number, sortBy: string, sortDirection: string) => { rows: IRow[]; totalCount: number; };
+    multiSelect?: boolean;
+    sortBy: string;
+    sortDirection: string;
+    dataCallback: (
+      pageNumber: number,
+      pageSize: number,
+      sortBy: string,
+      sortDirection: string
+    ) => Promise<{
+      rows: IRow[];
+      total: number;
+      hasError: boolean;
+    }>;
+    onTableReady?: Function;
+    onRowsUpdated?: Function;
+    onRowSelect?: (row: IRow, isSelected: boolean, chk: HTMLInputElement) => void;
   }) {
     console.log("Table Init");
     this.ID_TABLE = options.tableId;
     this.ID_PAGER = options.pagerId;
     this.ID_BODY = this.ID_TABLE + "_body";
     this.columns = options.columns;
+    this.isMultiSelection = options.multiSelect;
+    this.sortBy = options.sortBy;
+    this.sortDirection = options.sortDirection;
     this.dataCallback = options.dataCallback;
+    this.onTableReady = options.onTableReady;
+    this.onRowsUpdated = options.onRowsUpdated;
+    this.onRowSelect = options.onRowSelect;
 
     if (options.pageSize && options.pageSize > 0) this.pageSize = options.pageSize;
 
@@ -78,7 +136,10 @@ class TABLE {
       .then(() => { return this.createHeaderRow(); })
       .then(() => { return this.createBody(); })
       .then(() => { return this.createpager(); })
-      .then(() => { this.getData(); })
+      .then(() => {
+        this.onTableReady && this.onTableReady();
+        this.getData();
+      })
   }
 
   private createTable() {
@@ -95,23 +156,31 @@ class TABLE {
       let thead = document.createElement("thead");
       let row = document.createElement("tr");
 
-      for (let column of this.columns) {
-        let cell = document.createElement("th");
+      for (var i = 0; i < this.columns.length; i++) {
+        const column = this.columns[i];
+        column.canSort =
+          column.type == EColType.CHECKBOX || !column.title.length ? false :
+            column.canSort == undefined ? true : column.canSort;
+
+              let cell = document.createElement("th");
         cell.id = "COL_" + column.key;
         cell.innerHTML = column.title;
-        cell.className = column.className || "";
-        if (column.width) cell.style.width = column.width;
-        if (column.minWidth) cell.style.minWidth = column.minWidth;
-        if (column.maxWidth) cell.style.maxWidth = column.maxWidth;
+        cell.classList.add("col-" + i);
+        if (column.className) cell.classList.add(column.className);
+
+        for (let prop in column.styles) {
+          cell.style[prop] = column.styles[prop];
+        }
 
         let sortIcon = document.createElement("div");
         sortIcon.className = "sort-icon";
 
         cell.appendChild(sortIcon);
 
-        cell.onclick = () => {
-          this.onHeaderCellClick(column);
-        };
+        if (column.canSort)
+          cell.onclick = () => {
+            this.onHeaderCellClick(column);
+          };
 
         row.append(cell);
       }
@@ -143,35 +212,84 @@ class TABLE {
 
       let elemPager = document.getElementById(this.ID_PAGER);
 
+      // First Page Button
       let btnFirst = document.createElement("button");
       btnFirst.id = `$this.ID_PAGER}_BTN_FIRST`;
       btnFirst.innerText = "First";
       btnFirst.onclick = () => { this.onFirst(); };
 
+      // Previous Page Button
       let btnPrevious = document.createElement("button");
       btnPrevious.id = `$this.ID_PAGER}_BTN_PREVIOUS`;
       btnPrevious.innerText = "Previous";
       btnPrevious.onclick = () => { this.onPrevious(); };
 
-      let elemPageNumber = document.createElement("div");
-      elemPageNumber.id = "GRID_PAGE_NUMBER";
-      elemPageNumber.className = "current-page-number"
+      // Current Page Details
+      let elWrapper = document.createElement("div");
+      elWrapper.style.display = "flex";
+      elWrapper.style.alignItems = "center";
+      elWrapper.style.margin = "0 20px";
 
+
+      let divOne = document.createElement("div");
+      divOne.innerText = "Page";
+
+      let elemInputPageNumber = document.createElement("input"); //as HTMLInputElement;
+      elemInputPageNumber.id = "GRID_CURRENT_PAGE_NUMBER";
+      elemInputPageNumber.className = "current-page-number";
+      elemInputPageNumber.type = "number";
+      elemInputPageNumber.style.width = "70px";
+      elemInputPageNumber.style.margin = "0 20px";
+      elemInputPageNumber.onchange = (e: Event) => { this.onPageNumberInputChange(e); };
+      elemInputPageNumber.onkeyup = (e: KeyboardEvent) => { this.onPageNumberInputKeyup(e); };
+
+      let elLastPageNumber = document.createElement("div");
+      elLastPageNumber.id = "LAST_PAGE_NUMBER";
+      elLastPageNumber.innerText = "of " + this.lastPageNumber;
+
+      elWrapper.append(divOne);
+      elWrapper.append(elemInputPageNumber);
+      elWrapper.append(elLastPageNumber);
+
+
+      // Next Page Button
       let btnNext = document.createElement("button");
       btnNext.id = `$this.ID_PAGER}_BTN_NEXT`;
       btnNext.innerText = "Next";
       btnNext.onclick = () => { this.onNext(); };
 
+      // Last Page Button
       let btnLast = document.createElement("button");
       btnLast.id = `$this.ID_PAGER}_BTN_LAST`;
       btnLast.innerText = "Last";
       btnLast.onclick = () => { this.onLast(); };
 
+      let selectPageSize = document.createElement("select");
+      selectPageSize.id = `${this.ID_PAGER}_PAGE_SIZE`;
+
+      let optOne = document.createElement("option");
+      let optTwo = document.createElement("option");
+      let optThree = document.createElement("option");
+
+      optOne.selected = true;
+      optOne.value = optOne.innerText = "10";
+      optTwo.value = optTwo.innerText = "20";
+      optThree.value = optThree.innerText = "50";
+
+      selectPageSize.append(optOne);
+      selectPageSize.append(optTwo);
+      selectPageSize.append(optThree);
+
+      selectPageSize.onchange = (e: Event) => {
+        this.onPageSizeChange((e.target as HTMLSelectElement).value);
+      }
+
       elemPager.append(btnFirst);
       elemPager.append(btnPrevious);
-      elemPager.append(elemPageNumber);
+      elemPager.append(elWrapper);
       elemPager.append(btnNext);
       elemPager.append(btnLast);
+      elemPager.append(selectPageSize);
 
       resolve();
     });
@@ -179,8 +297,8 @@ class TABLE {
   }
 
   private updatePageNumberElem() {
-    let el = document.getElementById("GRID_PAGE_NUMBER");
-    el.innerText = `Page ${this.pageNumber.toString()} of ${this.lastPageNumber}`;
+    let el = document.getElementById("GRID_CURRENT_PAGE_NUMBER") as HTMLInputElement;
+    el.value = this.pageNumber.toString();
   }
 
   private onFirst() {
@@ -205,38 +323,129 @@ class TABLE {
     this.getData();
   }
 
-  private getData() {
-    console.log("Table Update Results");
-    let resp = this.dataCallback(this.pageNumber, this.pageSize, this.sortBy, this.sortDirection);
-    this.totalCount = resp.totalCount;
-    this.updateLastPageIndex();
-    this.updatePageNumberElem();
-    this.setData(resp.rows);
+  private onPageSizeChange(size: string) {
+    // console.log("On Change: ", size);
+    this.pageSize = parseInt(size);
+    this.pageNumber = 1;
+    this.getData();
   }
 
-  private setData(rows: IRow[]) {
+  private onPageNumberInputChange(e: Event) {
+    let pageNumber = (e.target as HTMLInputElement).value;
+    this.pageNumber = pageNumber && parseInt(pageNumber) < this.lastPageNumber ? parseInt(pageNumber) : this.pageNumber;
+
+    this.getData();
+  }
+
+  private onPageNumberInputKeyup(e: KeyboardEvent) {
+    // Enter key/button on keyboard
+    if (e.keyCode == 13) {
+      let pageNumber = (e.target as HTMLInputElement).value;
+      this.pageNumber = pageNumber && parseInt(pageNumber) < this.lastPageNumber ? parseInt(pageNumber) : this.pageNumber;
+
+      this.getData();
+    }
+  }
+
+  private onSelectionChanged(e: Event) {
+    const target = e.target as HTMLInputElement;
+    const isChecked = target.checked;
+    // debugger;
+    if (!this.isMultiSelection) {
+      if (this.selectedRows[0]) {
+        let prevChk = document.getElementById("CHK_" + this.selectedRows[0].id) as HTMLInputElement;
+        prevChk.checked = false;
+      }
+      this.selectedRows = [];
+    }
+
+    let row = this.rows[parseInt(target.id.split("_")[2])];
+
+    if (isChecked) this.selectedRows.push(row);
+    else
+      if (this.isMultiSelection) {
+        const index = this.selectedRows.findIndex(r => r.id == row.id);
+        if (index > -1) this.selectedRows.splice(index, 1);
+      }
+
+    this.onRowSelect && this.onRowSelect(row, isChecked, target);
+  }
+
+  private getData() {
+    console.log("Table Update Results");
+    this.dataCallback(this.pageNumber, this.pageSize, this.sortBy, this.sortDirection)
+      .then((resp) => {
+        if (!resp.hasError) {
+          this.totalCount = resp.total;
+          this.rows = resp.rows;
+          this.updateLastPageIndex();
+          this.updatePageNumberElem();
+          this.setData();
+          this.selectedRows = [];
+        }
+      });
+  }
+
+  private setData() {
     let tbody = document.getElementById(this.ID_BODY);
     tbody.innerHTML = "";
 
-    for (let row of rows) {
-      let elemRow = document.createElement("tr");
-      if (row.id) elemRow.id = row.id;
-      if (row.className) elemRow.className = row.className;
+    // For each row
+    for (var i = 0; i < this.rows.length; i++) {
+      this.rows[i].id = "ROW_" + i;
+      var row = deepCopy(this.rows[i]);
 
-      for (let cell of row.cells) {
+      // If first column is checkbox
+      if (this.columns[0].type == EColType.CHECKBOX)
+        row.cells.unshift({ value: EColType.CHECKBOX })
+
+      // Create element for each row
+      let elemRow = document.createElement("tr");
+      elemRow.classList.add("flex-grid-row");
+
+      if (row.id) elemRow.id = row.id;
+      if (row.className) elemRow.classList.add(row.className);
+
+      // For each cell in row.cells
+      for (let k = 0; k < this.columns.length; k++) {
+        const column = this.columns[k];
+        const cell = row.cells[k];
+
+        // Create element for each cell
         let elemCell = document.createElement("td");
-        elemCell.className = cell.className || "";
-        elemCell.innerHTML = cell.value;
+
+        // If first value is checkbox then create checkbox
+        if (cell.value == EColType.CHECKBOX) {
+          let checkbox = document.createElement("input");
+          checkbox.id = "CHK_" + row.id;
+          checkbox.type = "checkbox";
+          checkbox.checked = !!column.checked;
+
+          checkbox = column.formatterCheckbox(this.rows[i], checkbox);
+
+          checkbox.onchange = (e: Event) => {
+            this.onSelectionChanged(e);
+          };
+
+          elemCell.append(checkbox);
+        }
+        else {
+          elemCell.className = cell.className || "";
+          elemCell.innerHTML = column.formatter ? column.formatter(this.rows[i]) : cell.value;
+        }
 
         elemRow.append(elemCell);
       }
 
       tbody.append(elemRow);
+      this.onRowsUpdated && this.onRowsUpdated();
     }
   }
 
   private updateLastPageIndex() {
     this.lastPageNumber = Math.ceil(this.totalCount / this.pageSize);
+    let el = document.getElementById("LAST_PAGE_NUMBER");
+    el.innerText = "of " + this.lastPageNumber.toString();
   }
 
   private onHeaderCellClick(column: IColumn) {
@@ -257,6 +466,14 @@ class TABLE {
 
     this.getData();
   }
+
+  getSelectedRow() {
+    return deepCopy(this.selectedRows.length ? this.isMultiSelection ? this.selectedRows : this.selectedRows[0] : null);
+  }
+
+  getVersion() {
+    return this.version;
+  }
 }
 
 enum ESortDirection {
@@ -264,27 +481,58 @@ enum ESortDirection {
   DECENDING = "desc"
 }
 
+enum EColType {
+  CHECKBOX = "checkbox"
+}
 interface IColumn {
   key: string;
   title: string;
+  /**
+   * Default: true
+   */
+  canSort?: boolean;
   className?: string;
-  width?: string;
-  minWidth?: string;
-  maxWidth?: string;
+  type?: EColType;
+  checked?: boolean;
+  styles?: IStyle;
+  formatter?: (row: IRow) => string;
+  formatterCheckbox?: (row: IRow, chk: HTMLInputElement) => HTMLInputElement;
+}
+
+interface IStyle {
+  [key: string]: string | number;
 }
 
 interface IRow {
-  id?: string;
+  id: string;
   className?: string;
   cells: ICell[];
 }
 
 interface ICell {
-  key: string;
   value: string;
   className?: string;
 }
 
+const deepCopy = <T>(inObject: T): T => {
+  let outObject, value, key
+
+  if (typeof inObject !== "object" || inObject === null) {
+    return inObject // Return the value if inObject is not an object
+  }
+
+  // Create an array or object to hold the values
+  outObject = Array.isArray(inObject) ? [] : {}
+
+  for (key in inObject) {
+    value = inObject[key]
+
+    // Recursively (deep) copy for nested objects, including arrays
+    outObject[key] = deepCopy(value)
+  }
+
+  return outObject
+}
 class DataService {
   private rows: IRow[] = [];
   private persons = [
@@ -4308,24 +4556,28 @@ class DataService {
     return new Promise(resolve => {
       let count = 500;
 
-      this.asyncLoop(count, (loop) => {
+      // For each person
+      asyncLoop(count, (loop) => {
         let i = loop.getIndex();
         let person = this.persons[i];
 
+        // Create row for person
         let row: IRow = {
           id: `ROW_${i}`,
-          className: "row",
           cells: (() => {
+            // Cells array to return
             let cells: ICell[] = [];
+            // All properties in person object
             let keys = Object.keys(person);
 
-            this.asyncLoop(keys.length, (innerLoop) => {
+            // For each property of person
+            asyncLoop(keys.length, (innerLoop) => {
               let j = innerLoop.getIndex();
-              let key = keys[j];
+              let property = keys[j];
 
               let cell: ICell = {
-                key: key.toUpperCase(),
-                value: person[key] // `Row: ${i + 1} - Cell: ${j + 1}`
+                // key: property.toUpperCase(),
+                value: person[property] // `Row: ${i + 1} - Cell: ${j + 1}`
               };
               cells.push(cell);
 
@@ -4348,50 +4600,9 @@ class DataService {
     let end = pageNumber * pageSize;
     let rows = Object.assign([], this.rows);
     if (sortBy && sortDirection) {
-      rows = rows.sort((a, b) => { return this.compareRows(a, b, colIndex, sortDirection); })
+      rows = rows.sort((a, b) => { return compareRows(a, b, colIndex, sortDirection); })
     }
-    return { totalCount: rows.length, rows: rows.slice(start, end) };
-  }
-
-  private asyncLoop(length: number, onIteration: (loop: IAsyncLoop) => void, onCompletion?: Function) {
-    let index = -1;
-    let done = false;
-    let loop: IAsyncLoop = {
-      next: () => {
-        if (done) return;
-        if (index < length - 1) {
-          index++;
-          onIteration(loop);
-        } else {
-          done = true;
-          if (onCompletion) { onCompletion("finish"); }
-        }
-      },
-      getIndex: () => { return index; },
-      break: () => {
-        done = true;
-        if (onCompletion) { onCompletion("break"); }
-      }
-    };
-    loop.next();
-  }
-
-  private compareRows(a: IRow, b: IRow, index: number, direction: string) {
-    // Use toUpperCase() to ignore character casing
-    var bandA = a.cells[index].value;
-    var bandB = b.cells[index].value;
-    if(typeof bandA == "number") bandA = (<number>bandA).toString();
-    if(typeof bandB == "number") bandB = (<number>bandB).toString();
-
-    let comparison = 0;
-    if (bandA > bandB) {
-      comparison = 1;
-    } else if (bandA < bandB) {
-      comparison = -1;
-    }
-
-    if (direction == ESortDirection.DECENDING) comparison = comparison * -1;
-    return comparison;
+    return { hasError: false, total: rows.length, rows: deepCopy(rows.slice(start, end)) };
   }
 }
 
@@ -4411,4 +4622,45 @@ interface IAsyncLoop {
   * Call loop.break() to terminate iterations.
   */
   break: () => void;
+}
+
+const asyncLoop = (length: number, onIteration: (loop: IAsyncLoop) => void, onCompletion?: Function) => {
+  let index = -1;
+  let done = false;
+  let loop: IAsyncLoop = {
+    next: () => {
+      if (done) return;
+      if (index < length - 1) {
+        index++;
+        onIteration(loop);
+      } else {
+        done = true;
+        if (onCompletion) { onCompletion("finish"); }
+      }
+    },
+    getIndex: () => { return index; },
+    break: () => {
+      done = true;
+      if (onCompletion) { onCompletion("break"); }
+    }
+  };
+  loop.next();
+}
+
+const compareRows = (a: IRow, b: IRow, index: number, direction: string) => {
+  // Use toUpperCase() to ignore character casing
+  var bandA = a.cells[index].value;
+  var bandB = b.cells[index].value;
+  if (typeof bandA == "number") bandA = (<number>bandA).toString();
+  if (typeof bandB == "number") bandB = (<number>bandB).toString();
+
+  let comparison = 0;
+  if (bandA > bandB) {
+    comparison = 1;
+  } else if (bandA < bandB) {
+    comparison = -1;
+  }
+
+  if (direction == ESortDirection.DECENDING) comparison = comparison * -1;
+  return comparison;
 }

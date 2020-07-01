@@ -1,11 +1,12 @@
 :host {
     // padding: 20px;
 }
-$color: #444;
-
 body { margin: unset; }
 .wrapper { padding: 20px; }
-table { 
+
+$color: #444;
+
+.flex-grid { 
     width: 100%; 
     table-layout: fixed;
     border-collapse: collapse;
@@ -14,7 +15,7 @@ table {
     overflow: hidden;
     margin-bottom: 40px;
     box-shadow: 0px 0px 6px 2px rgba(0, 0, 0, 0.2);
-}
+
 thead {
     background-color: $color;
     color: white;
@@ -40,7 +41,7 @@ th {
         width: 12px;
         height: 6px;
         position: absolute;
-        right: 12x;
+        right: 12px;
         top: 0;
         bottom: 0;
         margin: auto 0;
@@ -74,10 +75,11 @@ td {
     overflow: hidden;
     white-space: nowrap;
 }
-#pager {
+}
+.flex-grid-pager {
     display: flex;
     justify-content: center;
-    align-items: flex-end;
+    align-items: center;
     font-family: Segoe UI;
 
     button {
