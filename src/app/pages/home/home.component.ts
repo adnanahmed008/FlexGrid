@@ -20,22 +20,19 @@ export class HomeComponent implements OnInit {
 
   initTable() {
     let columns: IColumn[] = [
-      { key: "SELECT", title: "", type: EColType.CHECKBOX, checked: true, canSort: false, styles: { width: "20px" }, formatterCheckbox: (row, chk) => {
-        chk.checked = row.cells[0].value.length > 5;
-        return chk;
-      } },
+      { key: "SELECT", title: "", type: EColType.CHECKBOX, canSort: false, styles: { width: "20px" } },
       { key: "FIRSTNAME", title: "First Name", styles: { width: "15%" } },
       { key: "LASTNAME", title: "Last Name", styles: { width: "15%" } },
       { key: "ADDRESS", title: "Address", styles: { width: "20%" } },
       { key: "City", title: "City", styles: { width: "20%" }, canSort: false },
       { key: "STATE", title: "State", styles: { width: "20%" } },
-      { key: "ZIP", title: "Zip", styles: { width: "10%" } }
+      { key: "ZIP", title: "Zip" }
     ];
     this.table = new TABLE({
       tableId: "grid",
       pagerId: "pager",
       columns: columns,
-      multiSelect: true,
+      multiSelect: false,
       sortBy: columns[1].key,
       sortDirection: ESortDirection.DECENDING,
       dataCallback: (pageNumber, pageSize, sortBy, sortDirection): Promise<{
@@ -47,10 +44,6 @@ export class HomeComponent implements OnInit {
           let resp = this.srvData.getData(pageNumber, pageSize, sortBy, sortDirection, columns[0].type == EColType.CHECKBOX ? columns.findIndex(c => c.key == sortBy) - 1 : columns.findIndex(c => c.key == sortBy));
           resolve(resp);
         })
-      },
-      onRowSelect: (row, isSelected, chk) => {
-        console.log("On Row Select: ", isSelected ? true : false);
-        chk.checked = false;
       }
     });
   }
@@ -73,7 +66,7 @@ class TABLE {
   private sortBy: string = null;
   private sortDirection: string = null;
   private rows: IRow[] = [];
-  private selectedRows: IRow[] = [];
+  // private selectedRows: IRow[] = [];
   private isMultiSelection: boolean = false;
   private dataCallback: (
     pageNumber: number,
@@ -162,10 +155,10 @@ class TABLE {
           column.type == EColType.CHECKBOX || !column.title.length ? false :
             column.canSort == undefined ? true : column.canSort;
 
-              let cell = document.createElement("th");
+        let cell = document.createElement("th");
         cell.id = "COL_" + column.key;
         cell.innerHTML = column.title;
-        cell.classList.add("col-" + i);
+        cell.classList.add("col-x" + i);
         if (column.className) cell.classList.add(column.className);
 
         for (let prop in column.styles) {
@@ -211,17 +204,22 @@ class TABLE {
       if (this.ID_PAGER == "") { resolve(); return; }
 
       let elemPager = document.getElementById(this.ID_PAGER);
+      elemPager.classList.add("wrapper-current-page");
 
       // First Page Button
       let btnFirst = document.createElement("button");
       btnFirst.id = `$this.ID_PAGER}_BTN_FIRST`;
       btnFirst.innerText = "First";
+      btnFirst.classList.add("actionIcon");
+      btnFirst.classList.add(""); // Your custom class
       btnFirst.onclick = () => { this.onFirst(); };
 
       // Previous Page Button
       let btnPrevious = document.createElement("button");
       btnPrevious.id = `$this.ID_PAGER}_BTN_PREVIOUS`;
       btnPrevious.innerText = "Previous";
+      btnPrevious.classList.add("actionIcon");
+      btnPrevious.classList.add(""); // Your custom class
       btnPrevious.onclick = () => { this.onPrevious(); };
 
       // Current Page Details
@@ -236,10 +234,9 @@ class TABLE {
 
       let elemInputPageNumber = document.createElement("input"); //as HTMLInputElement;
       elemInputPageNumber.id = "GRID_CURRENT_PAGE_NUMBER";
-      elemInputPageNumber.className = "current-page-number";
-      elemInputPageNumber.type = "number";
-      elemInputPageNumber.style.width = "70px";
-      elemInputPageNumber.style.margin = "0 20px";
+      elemInputPageNumber.classList.add("textInputMin");
+      elemInputPageNumber.classList.add("pager-Input");
+      elemInputPageNumber.type = "text";
       elemInputPageNumber.onchange = (e: Event) => { this.onPageNumberInputChange(e); };
       elemInputPageNumber.onkeyup = (e: KeyboardEvent) => { this.onPageNumberInputKeyup(e); };
 
@@ -256,16 +253,21 @@ class TABLE {
       let btnNext = document.createElement("button");
       btnNext.id = `$this.ID_PAGER}_BTN_NEXT`;
       btnNext.innerText = "Next";
+      btnNext.classList.add("actionIcon");
+      btnNext.classList.add(""); // Your custom class
       btnNext.onclick = () => { this.onNext(); };
 
       // Last Page Button
       let btnLast = document.createElement("button");
       btnLast.id = `$this.ID_PAGER}_BTN_LAST`;
       btnLast.innerText = "Last";
+      btnLast.classList.add("actionIcon");
+      btnLast.classList.add(""); // Your custom class
       btnLast.onclick = () => { this.onLast(); };
 
       let selectPageSize = document.createElement("select");
       selectPageSize.id = `${this.ID_PAGER}_PAGE_SIZE`;
+      selectPageSize.classList.add("textDropdown");
 
       let optOne = document.createElement("option");
       let optTwo = document.createElement("option");
@@ -350,23 +352,26 @@ class TABLE {
   private onSelectionChanged(e: Event) {
     const target = e.target as HTMLInputElement;
     const isChecked = target.checked;
-    // debugger;
+
+    // Unselect others if not multi selection enabled
     if (!this.isMultiSelection) {
-      if (this.selectedRows[0]) {
-        let prevChk = document.getElementById("CHK_" + this.selectedRows[0].id) as HTMLInputElement;
-        prevChk.checked = false;
+      let lstChk: HTMLInputElement[] = [];
+      let body = document.getElementById(this.ID_BODY) as HTMLTableSectionElement;
+      for (var i = 0; i < body.children.length; i++) {
+        const row = body.children[i];
+
+        let chk = row.children[0].children[0] as HTMLInputElement;
+
+        // If the found checkbox is not this one
+        if (chk.id != target.id) lstChk.push(chk);
       }
-      this.selectedRows = [];
+
+      for (let chk of lstChk) {
+        chk.checked = false;
+      }
     }
 
     let row = this.rows[parseInt(target.id.split("_")[2])];
-
-    if (isChecked) this.selectedRows.push(row);
-    else
-      if (this.isMultiSelection) {
-        const index = this.selectedRows.findIndex(r => r.id == row.id);
-        if (index > -1) this.selectedRows.splice(index, 1);
-      }
 
     this.onRowSelect && this.onRowSelect(row, isChecked, target);
   }
@@ -381,7 +386,6 @@ class TABLE {
           this.updateLastPageIndex();
           this.updatePageNumberElem();
           this.setData();
-          this.selectedRows = [];
         }
       });
   }
@@ -421,7 +425,8 @@ class TABLE {
           checkbox.type = "checkbox";
           checkbox.checked = !!column.checked;
 
-          checkbox = column.formatterCheckbox(this.rows[i], checkbox);
+          if (column.formatterCheckbox)
+            checkbox = column.formatterCheckbox(this.rows[i], checkbox);
 
           checkbox.onchange = (e: Event) => {
             this.onSelectionChanged(e);
@@ -467,12 +472,35 @@ class TABLE {
     this.getData();
   }
 
+  private findRowByCheckboxId(id: string) {
+    return this.rows[parseInt(id.split("_")[2])];
+  }
+
   getSelectedRow() {
-    return deepCopy(this.selectedRows.length ? this.isMultiSelection ? this.selectedRows : this.selectedRows[0] : null);
+    let lstChk: HTMLInputElement[] = [];
+    let rows: IRow[] = [];
+
+    let body = document.getElementById(this.ID_BODY) as HTMLTableSectionElement;
+    for (var i = 0; i < body.children.length; i++) {
+      const row = body.children[i];
+
+      let chk = row.children[0].children[0] as HTMLInputElement;
+      lstChk.push(chk);
+    }
+
+    lstChk.forEach(chk => {
+      rows.push(this.findRowByCheckboxId(chk.id));
+    })
+
+    return rows.length ? this.isMultiSelection ? rows : rows[0] : null;
   }
 
   getVersion() {
     return this.version;
+  }
+
+  refreshData() {
+    this.getData();
   }
 }
 
