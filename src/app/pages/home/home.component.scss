@@ -1,13 +1,17 @@
 :host {
     // padding: 20px;
 }
-body { margin: unset; }
-.wrapper { padding: 20px; }
+body {
+    margin: unset;
+}
+.wrapper {
+    padding: 20px;
+}
 
 $color: #444;
 
-.flex-grid { 
-    width: 100%; 
+.flex-grid {
+    width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
     text-align: center;
@@ -16,65 +20,75 @@ $color: #444;
     margin-bottom: 40px;
     box-shadow: 0px 0px 6px 2px rgba(0, 0, 0, 0.2);
 
-thead {
-    background-color: $color;
-    color: white;
-}
-tbody {
-    tr {
-        &:nth-child(odd) { background-color: #e6e6e6; }
-        &:nth-child(even) { background-color: #efefef; }
-        &:hover { background-color: #ddd; }
+    thead {
+        background-color: $color;
+        color: white;
     }
-}
-th { 
-    position: relative;
-    padding: 10px 12px;
-    font-family: "Segoe UI";
-    font-weight: 400;
-    cursor: pointer;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-
-    .sort-icon {
-        width: 12px;
-        height: 6px;
-        position: absolute;
-        right: 12px;
-        top: 0;
-        bottom: 0;
-        margin: auto 0;
-        transition: transform 200ms ease-in;
-        display: none;
-
-        &::before {
-            content: "";
-            display: block;
-            width: 0;
-            height: 0;
-            border: 6px solid transparent;
-            border-top-color: white;
+    tbody {
+        tr {
+            &:nth-child(odd) {
+                background-color: #e6e6e6;
+            }
+            &:nth-child(even) {
+                background-color: #efefef;
+            }
+            &:hover {
+                background-color: #ddd;
+            }
         }
     }
+    th {
+        position: relative;
+        padding: 10px 12px;
+        font-family: "Segoe UI";
+        font-weight: 400;
+        cursor: pointer;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
 
-    &.sortBy {
-        font-weight: 500;
+        .sort-icon {
+            width: 12px;
+            height: 6px;
+            position: absolute;
+            right: 12px;
+            top: 0;
+            bottom: 0;
+            margin: auto 0;
+            transition: transform 200ms ease-in;
+            display: none;
 
-        .sort-icon { display: block; }
+            &::before {
+                content: "";
+                display: block;
+                width: 0;
+                height: 0;
+                border: 6px solid transparent;
+                border-top-color: white;
+            }
+        }
+
+        &.sortBy {
+            font-weight: 500;
+
+            .sort-icon {
+                display: block;
+            }
+        }
+
+        &.desc {
+            .sort-icon {
+                transform: rotateZ(180deg);
+            }
+        }
     }
-
-    &.desc {
-        .sort-icon { transform: rotateZ(180deg); }
+    td {
+        padding: 10px 12px;
+        font-family: "Segoe UI Light";
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
     }
-}
-td { 
-    padding: 10px 12px;
-    font-family: "Segoe UI Light";
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-}
 }
 .flex-grid-pager {
     display: flex;
@@ -94,5 +108,61 @@ td {
         padding: 0px 20px;
         font-size: 40px;
         line-height: 56px;
+    }
+}
+
+.c-select {
+    display: flex;
+    align-items: center;
+    width: fit-content;
+    cursor: pointer;
+
+    .control-indicator {
+        position: relative;
+        height: 20px;
+        width: 20px;
+        background: #e6e6e6;
+
+        &::after {
+            content: "";
+            position: absolute;
+            top: 4px;
+            left: 8px;
+            width: 3px;
+            height: 8px;
+            border: solid #fff;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+    }
+
+    .label-text {
+        margin-left: 10px;
+    }
+
+    input {
+        display: none;
+    }
+    input:checked ~ .control-indicator {
+        background: #2aa1c0;
+    }
+
+    &.radio {
+        .control-indicator {
+            border-radius: 100%;
+
+            &::after {
+                top: 0;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                margin: auto;
+                width: 8px;
+                height: 8px;
+                background: white;
+                border: unset;
+                border-radius: inherit;
+            }
+        }
     }
 }
